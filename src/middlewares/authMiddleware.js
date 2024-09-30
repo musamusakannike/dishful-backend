@@ -1,10 +1,10 @@
-const jwt = require("jsonwebtoken");
-const User = require("../models/user.model");
-const sendResponse = require("../config/sendResponse");
+const jwt = require('jsonwebtoken');
+const User = require('../models/user.model')
 
 const authenticate = async (req, res, next) => {
   try {
-    const token = req.cookies["token"];
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer token
 
     if (!token) {
       return sendResponse(res, 401, "Unauthorized");
@@ -26,7 +26,8 @@ const authenticate = async (req, res, next) => {
 
 const authenticateAdmin = async (req, res, next) => {
   try {
-    const token = req.cookies["token"];
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer token
 
     if (!token) {
       return sendResponse(res, 401, "Unauthorized");

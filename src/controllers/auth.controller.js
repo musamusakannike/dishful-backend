@@ -62,17 +62,13 @@ const loginUser = async (req, res) => {
     if (!isMatch) {
       return sendResponse(res, 400, "Invalid Username or password");
     }
+
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "24h",
     });
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "none",
-      maxAge: 24 * 60 * 60 * 1000,
-    });
-    return sendResponse(res, 200, "Login successful");
+    // Instead of setting cookie, return the token in the response body
+    return res.status(200).json({ token });
   } catch (error) {
     console.log(error);
     return sendResponse(res, 500, "Internal Server Error");
