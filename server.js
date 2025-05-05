@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
-import mongoose from 'mongoose';
+import morgan from "morgan";
 import cookieParser from 'cookie-parser';
 
 // Routes
@@ -27,6 +27,7 @@ app.use(cors({
 app.use(helmet());
 app.use(express.json());
 app.use(cookieParser());
+app.use(morgan('dev'));
 
 // Connect to MongoDB
 connectDB();

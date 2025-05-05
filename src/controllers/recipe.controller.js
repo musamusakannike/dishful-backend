@@ -1,6 +1,6 @@
 import Recipe from '../models/recipe.model.js';
 import { validateRecipe } from '../validation/recipe.validation.js';
-import { generateRecipe } from '../lib/gemini.js';
+import { genTextRecipe, genIngredientsRecipe, genRandomRecipe, genLeftoversRecipe } from '../lib/gemini.js';
 
 // Get all recipes for the current user
 export const getUserRecipes = async (req, res) => {
@@ -62,16 +62,40 @@ export const createRecipe = async (req, res) => {
 // Generate a recipe using Gemini API
 export const generateRecipeWithAI = async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, type = 'text', ingredients, leftovers } = req.body;
     
-    if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
-      return res.status(400).json({ message: 'Valid prompt is required' });
+    let recipe;
+    
+    switch (type) {
+      case 'ingredients':
+        if (!ingredients || !Array.isArray(ingredients)) {
+          return res.status(400).json({ message: 'Ingredients array is required for ingredients type' });
+        }
+        recipe = await genIngredientsRecipe(req, res);
+        break;
+        
+      case 'leftovers':
+        if (!leftovers || !Array.isArray(leftovers)) {
+          return res.status(400).json({ message: 'Leftovers array is required for leftovers type' });
+        }
+        recipe = await genLeftoversRecipe(req, res);
+        break;
+        
+      case 'random':
+        recipe = await genRandomRecipe(req, res);
+        break;
+        
+      case 'text':
+      default:
+        if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+          return res.status(400).json({ message: 'Valid prompt is required for text type' });
+        }
+        req.body.food = prompt;
+        recipe = await genTextRecipe(req, res);
+        break;
     }
     
-    // Generate recipe using Gemini API
-    const recipe = await generateRecipe(prompt);
-    
-    res.status(200).json(recipe);
+    return recipe;
   } catch (error) {
     console.error('Generate recipe error:', error);
     res.status(500).json({ message: 'Server error while generating recipe' });

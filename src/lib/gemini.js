@@ -1,90 +1,227 @@
-import { GoogleGenAI } from "@google/genai";
-import { Type } from "@google/genai";
+// gemini.js
+import { GoogleGenAI, Type as SchemaType } from "@google/genai";
+import dotenv from "dotenv";
 
-// Initialize the Google Generative AI SDK
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+dotenv.config();
 
-export const generateRecipe = async (prompt) => {
-  try {
-    // Create a more detailed prompt for the AI
-    const enhancedPrompt = `Generate a detailed recipe based on the following request: "${prompt}". 
-    Make sure the recipe is practical, delicious, and includes all necessary details.`;
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-    // Generate recipe with structured output
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: enhancedPrompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            'name': {
-              type: Type.STRING,
-              description: 'Name of the recipe',
-              nullable: false,
-            },
-            'description': {
-              type: Type.STRING,
-              description: 'Brief description of the recipe',
-              nullable: false,
-            },
-            'prepTime': {
-              type: Type.INTEGER,
-              description: 'Preparation time in minutes',
-              nullable: false,
-            },
-            'cookTime': {
-              type: Type.INTEGER,
-              description: 'Cooking time in minutes',
-              nullable: false,
-            },
-            'servings': {
-              type: Type.INTEGER,
-              description: 'Number of servings',
-              nullable: false,
-            },
-            'difficulty': {
-              type: Type.STRING,
-              description: 'Difficulty level (Easy, Medium, Hard)',
-              nullable: false,
-            },
-            'ingredients': {
-              type: Type.ARRAY,
-              description: 'List of ingredients with measurements',
-              items: {
-                type: Type.STRING
-              },
-              nullable: false,
-            },
-            'instructions': {
-              type: Type.ARRAY,
-              description: 'Step-by-step cooking instructions',
-              items: {
-                type: Type.STRING
-              },
-              nullable: false,
-            },
-            'tips': {
-              type: Type.ARRAY,
-              description: 'Optional cooking tips and variations',
-              items: {
-                type: Type.STRING
-              },
-              nullable: true,
-            }
-          },
-          required: ['name', 'description', 'prepTime', 'cookTime', 'servings', 'difficulty', 'ingredients', 'instructions'],
+// Extended Recipe Schema with new properties
+const recipeSchema = {
+  description: "Complete recipe structure with additional information",
+  type: SchemaType.OBJECT,
+  properties: {
+    title: {
+      type: SchemaType.STRING,
+      description: "The name of the recipe",
+      nullable: false,
+    },
+    ingredients: {
+      type: SchemaType.ARRAY,
+      description: "List of ingredients required",
+      items: { type: SchemaType.STRING },
+    },
+    steps: {
+      type: SchemaType.ARRAY,
+      description: "List of steps to prepare the dish",
+      items: { type: SchemaType.STRING },
+    },
+    recipeSource: {
+      type: SchemaType.STRING,
+      description: "Where the recipe originates from",
+    },
+    foodLocation: {
+      type: SchemaType.STRING,
+      description: "Where the food is consumed majorly",
+    },
+    additionalInfo: {
+      type: SchemaType.STRING,
+      description: "Any additional information about the recipe",
+    },
+    nutritionalInfo: {
+      type: SchemaType.OBJECT,
+      description: "Nutritional information about the recipe",
+      properties: {
+        calories: {
+          type: SchemaType.STRING,
+          description: "Calories per serving",
+        },
+        protein: { type: SchemaType.STRING, description: "Protein content" },
+        fat: { type: SchemaType.STRING, description: "Fat content" },
+        carbs: {
+          type: SchemaType.STRING,
+          description: "Carbohydrates content",
         },
       },
-    });
+    },
+    difficulty: {
+      type: SchemaType.STRING,
+      description: "Recipe difficulty level (easy, medium, hard)",
+    },
+    timeEstimate: {
+      type: SchemaType.STRING,
+      description: "Estimated time required to make the dish",
+    },
+    pairings: {
+      type: SchemaType.ARRAY,
+      description: "Suggested pairings with the recipe",
+      items: { type: SchemaType.STRING },
+    },
+    substitutions: {
+      type: SchemaType.ARRAY,
+      description: "Possible ingredient substitutions",
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          ingredient: {
+            type: SchemaType.STRING,
+            description: "Original ingredient",
+          },
+          substitute: {
+            type: SchemaType.STRING,
+            description: "Suggested substitute",
+          },
+        },
+      },
+    },
+  },
+  required: ["title", "ingredients", "steps"],
+};
 
-    // Parse the JSON response
-    const recipeData = JSON.parse(response.text);
-    
-    return recipeData;
+// Helper function to generate content using new pattern
+const generateRecipeContent = async (prompt, schema) => {
+  const response = await genAI.models.generateContent({
+    model: 'gemini-2.0-flash',
+    contents: prompt,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+    },
+  });
+  return JSON.parse(response.text);
+};
+
+// Generate Recipe by Food Name
+export const genTextRecipe = async (req, res) => {
+  const { food, additionalText } = req.body;
+
+  if (!food) {
+    return res
+      .status(400)
+      .json({ error: "Food is required in the request body" });
+  }
+
+  if (additionalText && typeof additionalText !== "string") {
+    return res.status(400).json({ error: "Additional text must be a string" });
+  }
+
+  try {
+    const prompt = `Provide a complete recipe for ${food}. ${
+      additionalText ? `${additionalText}.` : ""
+    } Include the title, ingredients, steps, source, location, nutritional information, difficulty, time estimate, pairings, and substitutions.`;
+
+    const recipe = await generateRecipeContent(prompt, recipeSchema);
+    return res.json(recipe);
   } catch (error) {
-    console.error('Gemini API error:', error);
-    throw new Error('Failed to generate recipe with AI');
+    console.error("Error generating recipe:", error);
+    res.status(500).json({ error: "Failed to generate the recipe" });
+  }
+};
+
+// Generate Recipe by Ingredients
+export const genIngredientsRecipe = async (req, res) => {
+  const { ingredients, additionalText } = req.body;
+
+  if (!Array.isArray(ingredients) || ingredients.length === 0) {
+    return res
+      .status(400)
+      .json({ error: "Ingredients list is required and cannot be empty" });
+  }
+
+  if (additionalText && typeof additionalText !== "string") {
+    return res.status(400).json({ error: "Additional text must be a string" });
+  }
+
+  try {
+    const combinedSchema = {
+      type: SchemaType.OBJECT,
+      description: "Recipe or message response",
+      properties: {
+        recipe: recipeSchema,
+        message: {
+          type: SchemaType.STRING,
+          description: "Message indicating if no recipe is available",
+        },
+        otherRecipes: {
+          type: SchemaType.ARRAY,
+          description: "List of additional food recipes, if available",
+          items: recipeSchema,
+        },
+      },
+    };
+
+    const prompt = `Based on the following ingredients: ${ingredients.join(
+      ", "
+    )}. ${
+      additionalText ? `${additionalText}.` : ""
+    } Provide a suitable recipe. If no matching recipe exists, respond with 'No recipe available'. If multiple foods match, provide the first recipe and include others under 'otherRecipes'. Include nutritional information, difficulty, time estimate, pairings, and substitutions.`;
+
+    const response = await generateRecipeContent(prompt, combinedSchema);
+
+    if (response.message && response.message.includes("No recipe available")) {
+      return res.status(404).json({ message: response.message });
+    }
+
+    const { recipe, otherRecipes = [] } = response;
+    return res.json({ recipe, otherRecipes });
+  } catch (error) {
+    console.error("Error generating recipe:", error);
+    res.status(500).json({ error: "Failed to generate the recipe" });
+  }
+};
+
+// Generate Random Recipe
+export const genRandomRecipe = async (req, res) => {
+  const { additionalText } = req.body;
+
+  if (additionalText && typeof additionalText !== "string") {
+    return res.status(400).json({ error: "Additional text must be a string" });
+  }
+
+  try {
+    const prompt = `Generate a random recipe. ${
+      additionalText ? `${additionalText}.` : ""
+    } Include the title, ingredients, steps, recipe source, food location, nutritional information, difficulty level, time estimate, pairings, and substitutions.`;
+
+    const recipe = await generateRecipeContent(prompt, recipeSchema);
+    return res.json(recipe);
+  } catch (error) {
+    console.error("Error generating random recipe:", error);
+    res.status(500).json({ error: "Failed to generate the random recipe" });
+  }
+};
+
+// Generate Recipe by Leftovers
+export const genLeftoversRecipe = async (req, res) => {
+  const { leftovers, additionalText = "" } = req.body;
+
+  if (!Array.isArray(leftovers) || leftovers.length === 0) {
+    return res
+      .status(400)
+      .json({ error: "Leftover ingredients are required and cannot be empty" });
+  }
+
+  try {
+    const prompt = `Create a recipe using the following leftover ingredients: ${leftovers.join(
+      ", "
+    )}. ${
+      additionalText ? `${additionalText}.` : ""
+    } Include the title, ingredients, steps, source, location, nutrition, difficulty level, time estimate, pairings, and possible substitutions.`;
+
+    const recipe = await generateRecipeContent(prompt, recipeSchema);
+    return res.json(recipe);
+  } catch (error) {
+    console.error("Error generating leftovers recipe:", error);
+    res.status(500).json({ error: "Failed to generate the leftovers recipe" });
   }
 };
